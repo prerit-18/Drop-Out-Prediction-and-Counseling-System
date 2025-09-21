@@ -105,7 +105,7 @@ def get_students_count():
         db = client[DATABASE_NAME]
         collection = db[COLLECTION_NAME]
         
-        count = collection.count_documents({})
+        count = collection.count_documents({"dropout_probability": {"$gte": 0.7}})
         return count
         
     except Exception as e:
@@ -122,9 +122,9 @@ def get_recent_students(limit=10):
         db = client[DATABASE_NAME]
         collection = db[COLLECTION_NAME]
         
-        # Get all recent students
+        # Get recent high-risk students
         students = list(collection.find(
-            {}
+            {"dropout_probability": {"$gte": 0.7}}
         ).sort("timestamp", -1).limit(limit))
         
         return students
@@ -132,27 +132,6 @@ def get_recent_students(limit=10):
     except Exception as e:
         st.error(f"❌ Error getting recent high-risk students: {str(e)}")
         return []
-
-def search_student_by_id(student_id):
-    """Search for a student by ID in MongoDB"""
-    try:
-        client = get_mongodb_connection()
-        if client is None:
-            return None, "MongoDB connection failed"
-        
-        db = client[DATABASE_NAME]
-        collection = db[COLLECTION_NAME]
-        
-        # Search for student by student_id
-        student = collection.find_one({"student_id": student_id})
-        
-        if student:
-            return student, "Student found"
-        else:
-            return None, "Student not found"
-            
-    except Exception as e:
-        return None, f"Error searching student: {str(e)}"
 
 # API Connection Functions
 @st.cache_data
@@ -273,18 +252,8 @@ else:
     st.sidebar.info("💡 Check MongoDB connection")
 
 if page == "Counselor Dashboard":
-    st.title("🎓 Counselor Dashboard")
+    st.title("🎓 Counselor Dashboard - Students Database")
     
-    # Initialize session state for contact and meeting popups
-    if 'show_contact' not in st.session_state:
-        st.session_state.show_contact = False
-    if 'show_meeting' not in st.session_state:
-        st.session_state.show_meeting = False
-    if 'student_found' not in st.session_state:
-        st.session_state.student_found = False
-    if 'student_info' not in st.session_state:
-        st.session_state.student_info = None
-
     if not mongodb_connected:
         st.error("❌ MongoDB is not connected. Cannot access students database.")
         st.info("💡 Please check your MongoDB connection and try again.")
@@ -441,10 +410,7 @@ if page == "Counselor Dashboard":
             
             with col_meeting:
                 if st.button("📅 Schedule Meeting", key="meeting_btn"):
-                    st.session_state.show_meeting = True
-                    st.session_state.student_found = True
-                    st.session_state.student_info = found_student
-                    st.rerun()
+                    st.success("Meeting scheduled! You will receive a confirmation email.")
             
             with col_export:
                 if st.button("📥 Export Student Data", key="export_btn"):
@@ -489,38 +455,6 @@ if page == "Counselor Dashboard":
                     
                     if st.button("❌ Close Contact Window", key="close_contact"):
                         st.session_state.show_contact = False
-                        st.rerun()
-            # Meeting scheduling popup
-            if st.session_state.get('show_meeting', False):
-                with st.container():
-                    st.markdown(f"""
-                    <div style="background-color: #e8f5e8; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #28a745;">
-                        <h3 style="color: #28a745; margin-top: 0;">📅 Schedule Meeting</h3>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Student:</strong> {search_id}</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Risk Level:</strong> {found_student.get('risk_level', 'N/A')}</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Dropout Probability:</strong> {found_student.get('dropout_probability', 0):.1%}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Meeting form
-                    with st.form("meeting_form"):
-                        meeting_date = st.date_input("Select Meeting Date")
-                        meeting_time = st.time_input("Select Meeting Time")
-                        meeting_type = st.selectbox("Meeting Type", ["Academic Counseling", "Financial Aid Discussion", "General Support", "Emergency Intervention"])
-                        notes = st.text_area("Meeting Notes", placeholder="Add any notes or agenda items...")
-                        
-                        submitted = st.form_submit_button("📅 Schedule Meeting")
-                        
-                        if submitted:
-                            st.success(f"✅ Meeting scheduled for {meeting_date} at {meeting_time}!")
-                            st.info(f"Meeting Type: {meeting_type}")
-                            if notes:
-                                st.info(f"Notes: {notes}")
-                            st.session_state.show_meeting = False
-                            st.rerun()
-                    
-                    if st.button("❌ Cancel", key="cancel_meeting"):
-                        st.session_state.show_meeting = False
                         st.rerun()
         else:
             st.error(f"Student {search_id} not found in database!")
@@ -620,128 +554,105 @@ if page == "Counselor Dashboard":
                 mime="text/csv"
             )
 
-elif page == "Student Dashboard":
+elif page == "Student Database":
     st.title("👨‍🎓 Student Database")
-    
-    if not mongodb_connected:
-        st.error("❌ MongoDB is not connected. Cannot access student database.")
-        st.info("💡 Please check your MongoDB connection and try again.")
-        st.stop()
     
     # Search functionality
     st.write("### Search Your Information")
-    search_id = st.text_input("Enter Your Student ID")
+    search_id = st.number_input("Enter Your Student ID", min_value=1, max_value=len(student_data), value=1)
     
-    if st.button("Search My Information") and search_id:
-        student, message = search_student_by_id(search_id)
-        
-        if student:
+    if st.button("Search My Information"):
+        if search_id in student_data.index:
+            student_info = student_data.loc[search_id]
             st.success(f"✅ Welcome, Student {search_id}!")
             
             # Display comprehensive student information
             st.write("### Your Academic Profile")
             
-            prediction_data = student.get("prediction_data", {})
-            prediction_result = student.get("prediction_result", {})
-            
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.write("**Personal Details:**")
-                st.write(f"- **Student ID:** {student.get('student_id', 'N/A')}")
-                st.write(f"- **Course:** {prediction_data.get('course', 'N/A')}")
-                st.write(f"- **Gender:** {'Male' if prediction_data.get('gender') == 1 else 'Female' if prediction_data.get('gender') == 0 else 'N/A'}")
-                st.write(f"- **Age at Enrollment:** {prediction_data.get('age_at_enrollment', 'N/A')}")
-                st.write(f"- **Marital Status:** {prediction_data.get('marital_status', 'N/A')}")
-                st.write(f"- **Nationality:** {prediction_data.get('nationality', 'N/A')}")
+                st.write(f"- **Application Order:** {student_info.get('Application order', 'N/A')}")
+                st.write(f"- **Course:** {student_info.get('Course', 'N/A')}")
+                st.write(f"- **Gender:** {student_info.get('Gender', 'N/A')}")
+                st.write(f"- **Age at Enrollment:** {student_info.get('Age at enrollment', 'N/A')}")
+                st.write(f"- **Marital Status:** {student_info.get('Marital status', 'N/A')}")
+                st.write(f"- **Nationality:** {student_info.get('Nationality', 'N/A')}")
             
             with col2:
                 st.write("**Academic Information:**")
-                st.write(f"- **Prediction:** {prediction_result.get('prediction', 'N/A')}")
-                st.write(f"- **Risk Level:** {student.get('risk_level', 'N/A')}")
-                st.write(f"- **Dropout Probability:** {student.get('dropout_probability', 0):.1%}")
-                st.write(f"- **Confidence:** {student.get('confidence', 0):.1%}")
-                st.write(f"- **Application Mode:** {prediction_data.get('application_mode', 'N/A')}")
-                st.write(f"- **Previous Qualification:** {prediction_data.get('previous_qualification', 'N/A')}")
+                st.write(f"- **Current Status:** {student_info.get('Target', 'N/A')}")
+                st.write(f"- **Previous Qualification:** {student_info.get('Previous qualification', 'N/A')}")
+                st.write(f"- **Application Mode:** {student_info.get('Application mode', 'N/A')}")
+                st.write(f"- **Daytime/Evening:** {student_info.get('Daytime/evening attendance', 'N/A')}")
+                st.write(f"- **International Student:** {student_info.get('International', 'N/A')}")
+                st.write(f"- **Scholarship Holder:** {student_info.get('Scholarship holder', 'N/A')}")
             
             with col3:
                 st.write("**Family Background:**")
-                st.write(f"- **Mother's Qualification:** {prediction_data.get('mother_qualification', 'N/A')}")
-                st.write(f"- **Father's Qualification:** {prediction_data.get('father_qualification', 'N/A')}")
-                st.write(f"- **Mother's Occupation:** {prediction_data.get('mother_occupation', 'N/A')}")
-                st.write(f"- **Father's Occupation:** {prediction_data.get('father_occupation', 'N/A')}")
-                st.write(f"- **Scholarship Holder:** {'Yes' if prediction_data.get('scholarship_holder') == 1 else 'No' if prediction_data.get('scholarship_holder') == 0 else 'N/A'}")
-                st.write(f"- **International:** {'Yes' if prediction_data.get('international') == 1 else 'No' if prediction_data.get('international') == 0 else 'N/A'}")
+                st.write(f"- **Mother's Qualification:** {student_info.get('Mother\'s qualification', 'N/A')}")
+                st.write(f"- **Father's Qualification:** {student_info.get('Father\'s qualification', 'N/A')}")
+                st.write(f"- **Mother's Occupation:** {student_info.get('Mother\'s occupation', 'N/A')}")
+                st.write(f"- **Father's Occupation:** {student_info.get('Father\'s occupation', 'N/A')}")
+                st.write(f"- **Displaced:** {student_info.get('Displaced', 'N/A')}")
+                st.write(f"- **Educational Special Needs:** {student_info.get('Educational special needs', 'N/A')}")
             
             # Academic Performance
             st.write("### Academic Performance")
             col1, col2 = st.columns(2)
             
             with col1:
-                st.write("**Semester 1 Performance:**")
-                st.write(f"- **Units Credited:** {prediction_data.get('curricular_units_1st_sem_credited', 'N/A')}")
-                st.write(f"- **Units Enrolled:** {prediction_data.get('curricular_units_1st_sem_enrolled', 'N/A')}")
-                st.write(f"- **Units Evaluated:** {prediction_data.get('curricular_units_1st_sem_evaluations', 'N/A')}")
-                st.write(f"- **Units Approved:** {prediction_data.get('curricular_units_1st_sem_approved', 'N/A')}")
-                st.write(f"- **Average Grade:** {prediction_data.get('curricular_units_1st_sem_grade', 'N/A')}")
+                st.write("**Semester 1 & 2 Performance:**")
+                st.write(f"- **Units Credited:** {student_info.get('Curricular units 1st sem (credited)', 'N/A')}")
+                st.write(f"- **Units Enrolled:** {student_info.get('Curricular units 1st sem (enrolled)', 'N/A')}")
+                st.write(f"- **Units Evaluated:** {student_info.get('Curricular units 1st sem (evaluations)', 'N/A')}")
+                st.write(f"- **Units Approved:** {student_info.get('Curricular units 1st sem (approved)', 'N/A')}")
+                st.write(f"- **Average Grade:** {student_info.get('Curricular units 1st sem (grade)', 'N/A')}")
             
             with col2:
-                st.write("**Semester 2 Performance:**")
-                st.write(f"- **Units Credited:** {prediction_data.get('curricular_units_2nd_sem_credited', 'N/A')}")
-                st.write(f"- **Units Enrolled:** {prediction_data.get('curricular_units_2nd_sem_enrolled', 'N/A')}")
-                st.write(f"- **Units Evaluated:** {prediction_data.get('curricular_units_2nd_sem_evaluations', 'N/A')}")
-                st.write(f"- **Units Approved:** {prediction_data.get('curricular_units_2nd_sem_approved', 'N/A')}")
-                st.write(f"- **Average Grade:** {prediction_data.get('curricular_units_2nd_sem_grade', 'N/A')}")
-            
-            # Financial Status
-            st.write("### Financial Status")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write(f"- **Debtor:** {'Yes' if prediction_data.get('debtor') == 1 else 'No' if prediction_data.get('debtor') == 0 else 'N/A'}")
-                st.write(f"- **Tuition Fees Up to Date:** {'Yes' if prediction_data.get('tuition_fees_up_to_date') == 1 else 'No' if prediction_data.get('tuition_fees_up_to_date') == 0 else 'N/A'}")
-            
-            with col2:
-                st.write(f"- **Displaced:** {'Yes' if prediction_data.get('displaced') == 1 else 'No' if prediction_data.get('displaced') == 0 else 'N/A'}")
-                st.write(f"- **Educational Special Needs:** {'Yes' if prediction_data.get('educational_special_needs') == 1 else 'No' if prediction_data.get('educational_special_needs') == 0 else 'N/A'}")
+                st.write("**Financial Status:**")
+                st.write(f"- **Debtor:** {student_info.get('Debtor', 'N/A')}")
+                st.write(f"- **Tuition Fees Up to Date:** {student_info.get('Tuition fees up to date', 'N/A')}")
+                st.write(f"- **Scholarship Holder:** {student_info.get('Scholarship holder', 'N/A')}")
+                st.write("**Economic Indicators:**")
+                st.write(f"- **Unemployment Rate:** {student_info.get('Unemployment rate', 'N/A')}%")
+                st.write(f"- **Inflation Rate:** {student_info.get('Inflation rate', 'N/A')}%")
+                st.write(f"- **GDP per Capita:** ${student_info.get('GDP', 'N/A')}")
             
             # Risk Assessment
             st.write("### Risk Assessment")
-            risk_level = student.get("risk_level", "Unknown")
-            dropout_prob = student.get("dropout_probability", 0)
+            risk_factors = []
             
-            if risk_level == "High":
-                st.error(f"🚨 **High Risk**: Dropout probability is {dropout_prob:.1%}. Immediate intervention recommended.")
-            elif risk_level == "Medium":
-                st.warning(f"⚠️ **Medium Risk**: Dropout probability is {dropout_prob:.1%}. Consider monitoring and support.")
+            if student_info.get('Target') == 'Dropout':
+                risk_factors.append("⚠️ Currently at risk of dropping out")
+            if student_info.get('Debtor') == 1:
+                risk_factors.append("💰 Financial difficulties (Debtor)")
+            if student_info.get('Tuition fees up to date') == 0:
+                risk_factors.append("💳 Tuition fees not up to date")
+            if student_info.get('Educational special needs') == 1:
+                risk_factors.append("🎓 Has special educational needs")
+            if student_info.get('Displaced') == 1:
+                risk_factors.append("🏠 Displaced person")
+            
+            if risk_factors:
+                st.warning("**Risk Factors Identified:**")
+                for factor in risk_factors:
+                    st.write(factor)
             else:
-                st.success(f"✅ **Low Risk**: Dropout probability is {dropout_prob:.1%}. You are likely to continue successfully.")
+                st.success("✅ No major risk factors identified")
             
             # Recommendations
             st.write("### Recommendations")
-            if risk_level == "High":
+            if student_info.get('Target') == 'Dropout':
                 st.info("📚 Consider meeting with academic counselor to discuss challenges and support options")
-            if prediction_data.get("debtor") == 1 or prediction_data.get("tuition_fees_up_to_date") == 0:
+            if student_info.get('Debtor') == 1 or student_info.get('Tuition fees up to date') == 0:
                 st.info("💳 Contact financial aid office to discuss payment options and available assistance")
-            if prediction_data.get("educational_special_needs") == 1:
+            if student_info.get('Educational special needs') == 1:
                 st.info("🎓 Reach out to disability services for additional academic support")
             
-            # Prediction Details
-            st.write("### Prediction Details")
-            if prediction_result.get("probabilities"):
-                prob_df = pd.DataFrame([
-                    {"Outcome": "Dropout", "Probability": f"{prediction_result['probabilities'].get('Dropout', 0):.1%}"},
-                    {"Outcome": "Enrolled", "Probability": f"{prediction_result['probabilities'].get('Enrolled', 0):.1%}"},
-                    {"Outcome": "Graduate", "Probability": f"{prediction_result['probabilities'].get('Graduate', 0):.1%}"}
-                ])
-                st.dataframe(prob_df, use_container_width=True)
-            
-            # Timestamp
-            st.write(f"**Prediction Date:** {student.get('created_at', 'N/A')}")
-            
         else:
-            st.error(f"❌ {message}")
-            st.info("💡 Make sure you have the correct Student ID. Students are added to the database when predictions are made.")
+            st.error(f"❌ Student {search_id} not found!")
 
 elif page == "About":
     st.title("📚 About the System")
