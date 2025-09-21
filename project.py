@@ -820,7 +820,7 @@ elif page == "About":
     """)
 
 elif page == "AI Predictions":
-    st.title("🤖 AI Predictions")
+    st.title("🤖 Let's Predict")
     
     if not api_connected:
         st.error("❌ AI API is not connected. Please start the Flask API server.")
