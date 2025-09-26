@@ -8,7 +8,10 @@ import io
 from pymongo import MongoClient
 from datetime import datetime
 import os
-
+# import streamlit as st
+mongodb_uri = st.secrets["MONGODB_URI"]
+google_api_key = st.secrets["GOOGLE_API_KEY"]
+gemini_model = st.secrets["GEMINI_MODEL"]
 # Page configuration
 st.set_page_config(
     page_title="Student Dropout Prediction & Counseling System",
