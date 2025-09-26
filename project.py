@@ -64,7 +64,29 @@ MOOD_COLLECTION_NAME = "student_moods"
 @st.cache_resource
 def get_mongodb_connection():
     try:
-        client = MongoClient(st.secrets["mongo"]["uri"])  # expects .streamlit/secrets.toml [mongo].uri
+        # Try multiple connection methods for deployment compatibility
+        connection_uri = None
+        
+        # Method 1: Streamlit secrets (for local development)
+        try:
+            if hasattr(st, "secrets") and "mongo" in st.secrets:
+                connection_uri = st.secrets["mongo"]["uri"]
+        except:
+            pass
+            
+        # Method 2: Environment variable (for deployment)
+        if not connection_uri:
+            connection_uri = os.getenv("MONGODB_URI")
+            
+        # Method 3: Fallback to localhost
+        if not connection_uri:
+            connection_uri = "mongodb://127.0.0.1:27017/"
+            
+        if not connection_uri:
+            st.error("❌ No MongoDB connection string found")
+            return None
+            
+        client = MongoClient(connection_uri)
         client.admin.command('ping')
         return client
     except Exception as e:
