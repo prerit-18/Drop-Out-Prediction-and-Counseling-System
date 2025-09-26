@@ -61,39 +61,15 @@ COLLECTION_NAME = "high_risk_students"
 MOOD_COLLECTION_NAME = "student_moods"
 
 # MongoDB Connection Functions
-@st.cache_resource(ttl=10)
+@st.cache_resource
 def get_mongodb_connection():
-    """Get MongoDB connection with retries and localhost fallback."""
-    import time
-
-    candidate_uris = []
-    # Prefer explicit env override first
-    if MONGODB_URI:
-        candidate_uris.append(MONGODB_URI)
-    # Fallbacks to avoid IPv6/hosts issues
-    if "mongodb://127.0.0.1:27017/" not in candidate_uris:
-        candidate_uris.append("mongodb://127.0.0.1:27017/")
-    if "mongodb://localhost:27017/" not in candidate_uris:
-        candidate_uris.append("mongodb://localhost:27017/")
-
-    last_error = None
-    for uri in candidate_uris:
-        for attempt in range(1, 6):
-            try:
-                client = MongoClient(
-                    uri,
-                    serverSelectionTimeoutMS=3000,
-                    connectTimeoutMS=3000,
-                    socketTimeoutMS=3000,
-                )
-                client.admin.command('ping')
-                return client
-            except Exception as e:
-                last_error = e
-                time.sleep(0.6)
-
-    st.error(f"❌ MongoDB connection failed: {str(last_error)}")
-    return None
+    try:
+        client = MongoClient("mongodb://localhost:27017", serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')
+        return client
+    except Exception as e:
+        st.error(f"❌ MongoDB connection failed: {e}")
+        return None
 
 def save_student_to_database(student_data, prediction_result):
     """Save student data to MongoDB"""
