@@ -4,6 +4,16 @@ import pickle
 import pandas as pd
 import numpy as np
 import os
+import uuid
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -59,6 +69,66 @@ FEATURE_MAPPING = {
     'inflation_rate': 'Inflation rate',
     'gdp': 'GDP'
 }
+
+# In-memory chatbot sessions
+CHAT_SESSIONS = {}
+# Offline chatbot conversations store
+OFFLINE_CONVERSATIONS = {}
+SYSTEM_PROMPT = (
+    "You are a helpful student counselor. Provide empathetic and practical advice for academic stress, family pressure, and dropout prevention."
+)
+
+def get_gemini_model():
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    if not api_key or genai is None:
+        print("Gemini not configured: missing GOOGLE_API_KEY or google-generativeai package.")
+        return None
+    try:
+        genai.configure(api_key=api_key)
+        # Allow override via env
+        preferred = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        candidates = [preferred, "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+        last_err = None
+        for name in candidates:
+            if not name:
+                continue
+            try:
+                print(f"Trying Gemini model: {name}")
+                return genai.GenerativeModel(name)
+            except Exception as e:
+                last_err = e
+                continue
+        print(f"Failed to initialize Gemini model. Last error: {last_err}")
+        return None
+    except Exception as e:
+        print(f"Gemini configuration error: {e}")
+        return None
+
+def _offline_get_or_create_session(session_id: str | None) -> str:
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    if session_id not in OFFLINE_CONVERSATIONS:
+        OFFLINE_CONVERSATIONS[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    return session_id
+
+def rule_based_reply(user_message: str) -> str:
+    m = (user_message or "").lower()
+    if any(k in m for k in ("stress", "stressed", "anxious", "anxiety")):
+        return (
+            "I'm sorry you're feeling stressed. Try short study bursts (25–30 mins), take regular breaks, hydrate, and get good sleep. I can help make a simple schedule." )
+    if any(k in m for k in ("exam", "exams", "test")):
+        return (
+            "Exams can be overwhelming. Break your syllabus into small chunks and review daily. Would you like a revision plan template?" )
+    if any(k in m for k in ("family", "parents", "home")):
+        return (
+            "Family pressure is tough. If it’s safe, try a calm conversation about your goals. We can outline talking points together, or you can book a counselor session." )
+    if any(k in m for k in ("career", "job", "future")):
+        return (
+            "Explore interests through small projects and short courses. Tell me a subject you enjoy and I can suggest a next step." )
+    if any(k in m for k in ("suicide", "hurt myself", "kill myself", "die by")):
+        return (
+            "I'm really sorry you're feeling this way. I'm not a replacement for emergency help. If you are in immediate danger, please contact local emergency services or a crisis hotline now. I can share resources for your country if you’d like." )
+    return "Thanks for sharing. Could you tell me a bit more so I can help better?"
 
 @app.route('/')
 def home():
@@ -263,6 +333,104 @@ def predict_batch():
             "error": f"Batch prediction failed: {str(e)}",
             "status": "error"
         }), 500
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    try:
+        data = request.get_json() or {}
+        session_id = data.get('session_id')
+        message = (data.get('message') or '').strip()
+        if not session_id or not message:
+            return jsonify({
+                "error": "session_id and message are required",
+                "status": "error"
+            }), 400
+
+        if session_id not in CHAT_SESSIONS:
+            CHAT_SESSIONS[session_id] = [
+                {"role": "system", "content": SYSTEM_PROMPT}
+            ]
+
+        CHAT_SESSIONS[session_id].append({"role": "user", "content": message})
+
+        model = get_gemini_model()
+        if model is None:
+            assistant_text = (
+                "I'm currently unavailable because the AI service isn't configured. "
+                "Please ask an admin to set GOOGLE_API_KEY (and optionally GEMINI_MODEL). "
+                "Meanwhile, try deep breathing, break tasks into small steps, and reach out to your counselor if stress persists."
+            )
+        else:
+            # Build prompt from history
+            history = CHAT_SESSIONS[session_id]
+            lines = []
+            for turn in history:
+                role = turn.get('role')
+                content = turn.get('content', '')
+                if role == 'system':
+                    lines.append(f"System: {content}")
+                elif role == 'user':
+                    lines.append(f"User: {content}")
+                else:
+                    lines.append(f"Assistant: {content}")
+            lines.append(f"User: {message}")
+            prompt = "\n".join(lines)
+            try:
+                resp = model.generate_content(prompt)
+                assistant_text = resp.text if hasattr(resp, 'text') else str(resp)
+            except Exception:
+                assistant_text = "I couldn't respond right now. Please try again in a moment."
+
+        CHAT_SESSIONS[session_id].append({"role": "assistant", "content": assistant_text})
+        return jsonify({
+            "reply": assistant_text,
+            "history": CHAT_SESSIONS[session_id][-20:],
+            "status": "success"
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Chat failed: {str(e)}",
+            "status": "error"
+        }), 500
+
+@app.route('/chat_offline', methods=['POST'])
+def chat_offline():
+    try:
+        data = request.get_json(force=True) or {}
+        session_id = data.get('session_id')
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({"error": "No message provided"}), 400
+
+        session_id = _offline_get_or_create_session(session_id)
+        history = OFFLINE_CONVERSATIONS[session_id]
+
+        # Append user message
+        history.append({"role": "user", "content": message})
+
+        # Strictly offline response
+        assistant_text = rule_based_reply(message)
+
+        history.append({"role": "assistant", "content": assistant_text})
+        return jsonify({
+            "session_id": session_id,
+            "reply": assistant_text,
+            "history": history[-30:]
+        })
+    except Exception as e:
+        return jsonify({"error": f"Chat offline failed: {str(e)}"}), 500
+
+@app.route('/reset_offline_session', methods=['POST'])
+def reset_offline_session():
+    try:
+        data = request.get_json(force=True) or {}
+        session_id = data.get('session_id')
+        if not session_id:
+            return jsonify({"error": "session_id required"}), 400
+        OFFLINE_CONVERSATIONS.pop(session_id, None)
+        return jsonify({"status": "reset", "session_id": session_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     if model is None:

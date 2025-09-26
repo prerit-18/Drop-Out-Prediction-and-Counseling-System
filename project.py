@@ -48,6 +48,7 @@ API_BASE_URL = "http://localhost:5001"
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
 DATABASE_NAME = "student_dropout_db"
 COLLECTION_NAME = "high_risk_students"
+MOOD_COLLECTION_NAME = "student_moods"
 
 # MongoDB Connection Functions
 @st.cache_resource
@@ -94,6 +95,49 @@ def save_student_to_database(student_data, prediction_result):
             
     except Exception as e:
         return False, f"Error saving to MongoDB: {str(e)}"
+
+def save_mood_entry(student_id, mood, stress_level, sleep_hours, notes=None):
+    """Save a student's mood entry to MongoDB"""
+    try:
+        client = get_mongodb_connection()
+        if client is None:
+            return False, "MongoDB connection failed"
+
+        db = client[DATABASE_NAME]
+        collection = db[MOOD_COLLECTION_NAME]
+
+        entry = {
+            "student_id": student_id,
+            "mood": mood,  # e.g., Very Happy, Happy, Neutral, Sad, Very Sad
+            "stress_level": stress_level,  # 0-10
+            "sleep_hours": sleep_hours,  # numeric
+            "notes": notes or "",
+            "timestamp": datetime.now(),
+            "created_at": datetime.now().isoformat()
+        }
+
+        result = collection.insert_one(entry)
+        if result.inserted_id:
+            return True, f"Mood saved with ID: {result.inserted_id}"
+        return False, "Failed to save mood entry"
+    except Exception as e:
+        return False, f"Error saving mood entry: {str(e)}"
+
+def get_recent_mood_entries(student_id=None, limit=30):
+    """Fetch recent mood entries, optionally filtered by student_id"""
+    try:
+        client = get_mongodb_connection()
+        if client is None:
+            return []
+
+        db = client[DATABASE_NAME]
+        collection = db[MOOD_COLLECTION_NAME]
+
+        query = {"student_id": student_id} if student_id else {}
+        entries = list(collection.find(query).sort("timestamp", -1).limit(limit))
+        return entries
+    except Exception:
+        return []
 
 def get_students_count():
     """Get count of students in database"""
@@ -251,8 +295,25 @@ mongodb_client = get_mongodb_connection()
 mongodb_connected = mongodb_client is not None
 
 # Sidebar navigation
-st.sidebar.title("🎓 Navigation")
-page = st.sidebar.selectbox("Choose Dashboard", ["Counselor Dashboard", "Student Dashboard", "AI Predictions", "About"])
+st.sidebar.title("🎓 Team Data Dynamos")
+
+
+# Simplified top-level navigation
+main_section = st.sidebar.selectbox("Choose Section", ["Counselor Section", "Student Section", "About"])
+
+# Map to internal pages
+if main_section == "Counselor Section":
+    page = st.sidebar.radio("Counselor Pages", ["Counselor Dashboard", "Student Database", "AI Predictions"])
+elif main_section == "Student Section":
+    # Student sub-menu
+    student_page = st.sidebar.radio("Student Pages", ["Mood Tracker", "Gemini Chatbot", "Offline Chatbot"])
+    page = (
+        "Student Mood Tracker" if student_page == "Mood Tracker" else
+        "Student Chatbot" if student_page == "Gemini Chatbot" else
+        "Offline Chatbot"
+    )
+else:
+    page = "About"
 
 # API Status Indicator
 if api_connected:
@@ -375,7 +436,11 @@ if page == "Counselor Dashboard":
     # Search functionality
     st.write("### Search Student")
     search_id = st.text_input("Enter Student ID")
-    
+
+    # Persist previously found student across reruns
+    found_student = st.session_state.get('student_info', None)
+    search_id_display = st.session_state.get('search_id', None)
+
     if st.button("Search Student") and search_id:
         found_student = None
         for student in all_students:
@@ -384,6 +449,11 @@ if page == "Counselor Dashboard":
                 break
         
         if found_student:
+            # Persist selection
+            st.session_state.student_info = found_student
+            st.session_state.student_found = True
+            st.session_state.search_id = search_id
+            search_id_display = search_id
             st.success(f"Student {search_id} found!")
             
             # Display detailed student information
@@ -464,7 +534,7 @@ if page == "Counselor Dashboard":
                     st.download_button(
                         label="📥 Download Student Data",
                         data=csv,
-                        file_name=f"high_risk_student_{search_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        file_name=f"high_risk_student_{(search_id_display or search_id or found_student.get('student_id','unknown'))}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv"
                     )
             
@@ -473,32 +543,32 @@ if page == "Counselor Dashboard":
                 with st.container():
                     import random
                     st.markdown(f"""
-                    <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #1f77b4;">
-                        <h3 style="color: #1f77b4; margin-top: 0;">📞 Contact Information</h3>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Student Email:</strong> {search_id}@university.edu</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Student Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Mother's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Father's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
-                        <div style="margin-top: 15px;">
-                            <button style="background-color: #1f77b4; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;">📧 Send Email</button>
-                            <button style="background-color: #28a745; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;">📞 Call Now</button>
-                            <button style="background-color: #ffc107; color: black; padding: 8px 16px; border: none; border-radius: 5px;">📅 Schedule</button>
+                    <div style=\"background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #1f77b4;\">
+                        <h3 style=\"color: #1f77b4; margin-top: 0;\">📞 Contact Information</h3>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Student Email:</strong> {(search_id_display or search_id or found_student.get('student_id','unknown'))}@university.edu</p>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Student Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Mother's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Father's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
+                        <div style=\"margin-top: 15px;\">
+                            <button style=\"background-color: #1f77b4; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;\">📧 Send Email</button>
+                            <button style=\"background-color: #28a745; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;\">📞 Call Now</button>
+                            <button style=\"background-color: #ffc107; color: black; padding: 8px 16px; border: none; border-radius: 5px;\">📅 Schedule</button>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
                     if st.button("❌ Close Contact Window", key="close_contact"):
                         st.session_state.show_contact = False
-                        st.rerun()
+
             # Meeting scheduling popup
             if st.session_state.get('show_meeting', False):
                 with st.container():
                     st.markdown(f"""
-                    <div style="background-color: #e8f5e8; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #28a745;">
-                        <h3 style="color: #28a745; margin-top: 0;">📅 Schedule Meeting</h3>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Student:</strong> {search_id}</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Risk Level:</strong> {found_student.get('risk_level', 'N/A')}</p>
-                        <p style="color: #000000; margin: 5px 0;"><strong>Dropout Probability:</strong> {found_student.get('dropout_probability', 0):.1%}</p>
+                    <div style=\"background-color: #e8f5e8; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #28a745;\">
+                        <h3 style=\"color: #28a745; margin-top: 0;\">📅 Schedule Meeting</h3>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Student:</strong> {(search_id_display or search_id or found_student.get('student_id','unknown'))}</p>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Risk Level:</strong> {found_student.get('risk_level', 'N/A')}</p>
+                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Dropout Probability:</strong> {found_student.get('dropout_probability', 0):.1%}</p>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -517,11 +587,9 @@ if page == "Counselor Dashboard":
                             if notes:
                                 st.info(f"Notes: {notes}")
                             st.session_state.show_meeting = False
-                            st.rerun()
                     
                     if st.button("❌ Cancel", key="cancel_meeting"):
                         st.session_state.show_meeting = False
-                        st.rerun()
         else:
             st.error(f"Student {search_id} not found in database!")
     
@@ -620,7 +688,7 @@ if page == "Counselor Dashboard":
                 mime="text/csv"
             )
 
-elif page == "Student Dashboard":
+elif page == "Student Database":
     st.title("👨‍🎓 Student Database")
     
     if not mongodb_connected:
@@ -779,9 +847,16 @@ elif page == "About":
     st.write("### Dataset Information")
     st.write(f"""
     - **Total Students:** {len(student_data):,}
-    - **Total Counseling Records:** {len(counselling_data):,}
     - **Unique Student IDs:** 1 to {len(student_data)}
     - **Data Fields:** 35 different attributes per student
+    """)
+
+    st.write("### Future Updates")
+    st.write(f"""
+    - Real Counsellors
+    - Chatbot
+    - Achievement Badges
+    - Different Counsellors Can be provided( Academic, Financial, Personal, Time Management)
     """)
     
     st.write("### Field Descriptions")
@@ -1148,3 +1223,184 @@ elif page == "AI Predictions":
             st.plotly_chart(fig_conf, use_container_width=True)
         else:
             st.info("💡 Upload and process a CSV file to see analytics here.")
+
+elif page == "Student Mood Tracker":
+    st.title("🧠 Student Mood Tracker")
+    
+    if not mongodb_connected:
+        st.error("❌ MongoDB is not connected. Cannot save or fetch moods.")
+        st.stop()
+    
+    # Session-based simple login
+    if 'logged_in_student_id' not in st.session_state:
+        st.session_state.logged_in_student_id = None
+    
+    if st.session_state.logged_in_student_id is None:
+        st.write("Please login with your Student ID to access the mood tracker.")
+        with st.form("mood_login_form"):
+            login_student_id = st.text_input("Student ID", key="mood_login_student_id")
+            login_submitted = st.form_submit_button("🔐 Login", type="primary")
+        if login_submitted:
+            if login_student_id.strip():
+                st.session_state.logged_in_student_id = login_student_id.strip()
+                st.success(f"Logged in as {st.session_state.logged_in_student_id}")
+                st.rerun()
+            else:
+                st.warning("Please enter a valid Student ID.")
+        st.stop()
+
+    # Logged in
+    st.info(f"Logged in as: {st.session_state.logged_in_student_id}")
+    if st.button("🔓 Logout"):
+        st.session_state.logged_in_student_id = None
+        st.rerun()
+
+    st.write("Track your daily mood and wellbeing. This helps counselors support you better.")
+    
+    # Mood submission form
+    with st.form("mood_form"):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.text_input("Your Student ID", value=st.session_state.logged_in_student_id, key="mood_student_id", disabled=True)
+            mood = st.select_slider(
+                "How are you feeling today?",
+                options=["Very Sad", "Sad", "Neutral", "Happy", "Very Happy"],
+                value="Neutral"
+            )
+            stress_level = st.slider("Stress Level (0=none, 10=extreme)", 0, 10, 5)
+        with col_b:
+            sleep_hours = st.number_input("Sleep Last Night (hours)", min_value=0.0, max_value=24.0, value=7.0, step=0.5)
+            notes = st.text_area("Notes (optional)", placeholder="Anything you'd like to share...")
+        submitted = st.form_submit_button("💾 Submit Mood", type="primary")
+    
+    if submitted:
+        student_id = st.session_state.logged_in_student_id
+        with st.spinner("Saving your mood..."):
+            ok, msg = save_mood_entry(student_id, mood, stress_level, sleep_hours, notes)
+        if ok:
+            st.success(msg)
+        else:
+            st.error(msg)
+    
+    st.divider()
+    st.write("### Recent Mood History")
+    
+    # Always restrict to the logged-in student
+    entries = get_recent_mood_entries(st.session_state.logged_in_student_id, limit=100)
+    
+    if not entries:
+        st.info("No mood entries found yet.")
+        st.stop()
+    
+    # Convert to DataFrame for display and charts
+    mood_df = pd.DataFrame([
+        {
+            "Student ID": e.get("student_id"),
+            "Mood": e.get("mood"),
+            "Stress": e.get("stress_level"),
+            "Sleep (h)": e.get("sleep_hours"),
+            "Notes": e.get("notes", ""),
+            "Time": e.get("created_at", "")
+        }
+        for e in entries
+    ])
+    
+    st.dataframe(mood_df, use_container_width=True)
+    
+    # # Simple charts
+    # st.write("### Mood Analytics")
+    # col_c1, col_c2 = st.columns(2)
+    # with col_c1:
+    #     try:
+    #         mood_counts = mood_df["Mood"].value_counts().reset_index()
+    #         mood_counts.columns = ["Mood", "Count"]
+    #         fig_mood = px.bar(mood_counts, x="Mood", y="Count", title="Mood Frequency")
+    #         st.plotly_chart(fig_mood, use_container_width=True)
+    #     except Exception:
+    #         pass
+    # with col_c2:
+    #     try:
+    #         fig_sleep = px.histogram(mood_df, x="Sleep (h)", nbins=20, title="Sleep Hours Distribution")
+    #         st.plotly_chart(fig_sleep, use_container_width=True)
+    #     except Exception:
+    #         pass
+
+elif page == "Student Chatbot":
+    st.title("💬 Student Chatbot")
+    st.write("Share your concerns and get supportive, practical guidance.")
+
+    # Ensure a session ID for backend chat context
+    if 'chat_session_id' not in st.session_state:
+        st.session_state.chat_session_id = f"student_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    if 'chat_history_ui' not in st.session_state:
+        st.session_state.chat_history_ui = []
+
+    # Render chat history
+    for role, content in st.session_state.chat_history_ui:
+        st.chat_message("user" if role == 'user' else "assistant").markdown(content)
+
+    user_msg = st.chat_input("Type your message...")
+
+    if user_msg:
+        st.session_state.chat_history_ui.append(('user', user_msg))
+        st.chat_message("user").markdown(user_msg)
+        # Send to backend
+        try:
+            resp = requests.post(
+                f"{API_BASE_URL}/chat",
+                json={
+                    "session_id": st.session_state.chat_session_id,
+                    "message": user_msg
+                },
+                timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                reply = data.get('reply', '...')
+            else:
+                reply = f"Backend error: {resp.status_code}"
+        except Exception as e:
+            reply = f"Connection error: {str(e)}"
+
+        st.session_state.chat_history_ui.append(('assistant', reply))
+        st.chat_message("assistant").markdown(reply)
+
+elif page == "Offline Chatbot":
+    st.title("💬 Offline Chatbot")
+    st.write("This chatbot works without internet or API keys using built-in guidance.")
+
+    if 'offline_session_id' not in st.session_state:
+        st.session_state.offline_session_id = f"offline_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    if 'offline_history_ui' not in st.session_state:
+        st.session_state.offline_history_ui = []
+
+    for role, content in st.session_state.offline_history_ui:
+        st.chat_message("user" if role == 'user' else "assistant").markdown(content)
+
+    user_msg = st.chat_input("Type your message...")
+
+    if user_msg:
+        st.session_state.offline_history_ui.append(('user', user_msg))
+        st.chat_message("user").markdown(user_msg)
+        try:
+            resp = requests.post(
+                f"{API_BASE_URL}/chat_offline",
+                json={
+                    "session_id": st.session_state.offline_session_id,
+                    "message": user_msg
+                },
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                reply = data.get('reply', '...')
+                st.session_state.offline_session_id = data.get('session_id', st.session_state.offline_session_id)
+            else:
+                reply = f"Backend error: {resp.status_code}"
+        except Exception as e:
+            reply = f"Connection error: {str(e)}"
+
+        st.session_state.offline_history_ui.append(('assistant', reply))
+        st.chat_message("assistant").markdown(reply)
