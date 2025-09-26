@@ -20,7 +20,7 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     try:
-        counselling_data = pd.read_excel("counselling_table.xlsx")
+        counselling_data = pd.read_excel("counselling_table.xlsx", engine="openpyxl")
         student_data = pd.read_csv("dataset.csv")
         
         # Create unique Student ID using row index (0-based)
