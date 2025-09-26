@@ -61,10 +61,10 @@ COLLECTION_NAME = "high_risk_students"
 MOOD_COLLECTION_NAME = "student_moods"
 
 # MongoDB Connection Functions
-@st.cache_resource
+@st.cache_resource(ttl=5)
 def get_mongodb_connection():
     try:
-        client = MongoClient("mongodb://localhost:27017", serverSelectionTimeoutMS=5000)
+        client = MongoClient("mongodb://127.0.0.1:27017", serverSelectionTimeoutMS=5000)
         client.admin.command('ping')
         return client
     except Exception as e:
