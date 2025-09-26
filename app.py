@@ -18,6 +18,10 @@ except Exception:
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
+# Diagnostics for Gemini initialization
+GEMINI_LAST_ERROR: str | None = None
+GEMINI_TRIED_MODELS: list[str] = []
+
 # Load the Random Forest model
 def load_model():
     try:
@@ -79,9 +83,11 @@ SYSTEM_PROMPT = (
 )
 
 def get_gemini_model():
+    global GEMINI_TRIED_MODELS, GEMINI_LAST_ERROR
     api_key = os.getenv("GOOGLE_API_KEY", "")
     if not api_key or genai is None:
         print("Gemini not configured: missing GOOGLE_API_KEY or google-generativeai package.")
+        GEMINI_LAST_ERROR = "Missing GOOGLE_API_KEY or google-generativeai package"
         return None
     try:
         genai.configure(api_key=api_key)
@@ -89,19 +95,24 @@ def get_gemini_model():
         preferred = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         candidates = [preferred, "gemini-1.5-flash", "gemini-1.5-flash-8b"]
         last_err = None
+        GEMINI_TRIED_MODELS = []
         for name in candidates:
             if not name:
                 continue
             try:
                 print(f"Trying Gemini model: {name}")
+                GEMINI_TRIED_MODELS.append(name)
                 return genai.GenerativeModel(name)
             except Exception as e:
                 last_err = e
+                GEMINI_TRIED_MODELS.append(name)
                 continue
         print(f"Failed to initialize Gemini model. Last error: {last_err}")
+        GEMINI_LAST_ERROR = str(last_err) if last_err else None
         return None
     except Exception as e:
         print(f"Gemini configuration error: {e}")
+        GEMINI_LAST_ERROR = str(e)
         return None
 
 def _offline_get_or_create_session(session_id: str | None) -> str:
@@ -147,6 +158,21 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "model_loaded": model is not None
+    })
+
+@app.route('/ai_health')
+def ai_health():
+    api_key_present = bool(os.getenv("GOOGLE_API_KEY", ""))
+    package_present = genai is not None
+    # Try a lightweight init without generating content
+    test_model = get_gemini_model()
+    configured = test_model is not None
+    return jsonify({
+        "configured": configured,
+        "api_key_present": api_key_present,
+        "package_present": package_present,
+        "tried_models": GEMINI_TRIED_MODELS,
+        "last_error": GEMINI_LAST_ERROR
     })
 
 @app.route('/features')
@@ -444,4 +470,5 @@ if __name__ == '__main__':
     print("- POST /predict : Single prediction")
     print("- POST /predict_batch : Batch prediction")
     
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    port = int(os.getenv("PORT", "5001"))
+    app.run(debug=True, host='0.0.0.0', port=port)

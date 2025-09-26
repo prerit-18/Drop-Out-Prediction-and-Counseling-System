@@ -303,7 +303,7 @@ mongodb_client = get_mongodb_connection()
 mongodb_connected = mongodb_client is not None
 
 # Sidebar navigation
-st.sidebar.title("🎓 Team Data Dynamos")
+st.sidebar.title("Team Data Dynamos")
 
 
 # Simplified top-level navigation
@@ -314,10 +314,10 @@ if main_section == "Counselor Section":
     page = st.sidebar.radio("Counselor Pages", ["Counselor Dashboard", "Student Database", "AI Predictions"])
 elif main_section == "Student Section":
     # Student sub-menu
-    student_page = st.sidebar.radio("Student Pages", ["Mood Tracker", "Gemini Chatbot", "Offline Chatbot"])
+    student_page = st.sidebar.radio("Student Pages", ["Mood Tracker", "AI Chatbot", "Offline Chatbot"])
     page = (
         "Student Mood Tracker" if student_page == "Mood Tracker" else
-        "Student Chatbot" if student_page == "Gemini Chatbot" else
+        "Student Chatbot" if student_page == "AI Chatbot" else
         "Offline Chatbot"
     )
 else:
@@ -342,7 +342,7 @@ else:
     st.sidebar.info("💡 Check MongoDB connection")
 
 if page == "Counselor Dashboard":
-    st.title("🎓 Counselor Dashboard")
+    st.title(" Counselor Dashboard")
     
     # Initialize session state for contact and meeting popups
     if 'show_contact' not in st.session_state:
@@ -457,149 +457,151 @@ if page == "Counselor Dashboard":
                 break
         
         if found_student:
-            # Persist selection
+            # Persist selection and switch UI to the details view
             st.session_state.student_info = found_student
             st.session_state.student_found = True
             st.session_state.search_id = search_id
-            search_id_display = search_id
             st.success(f"Student {search_id} found!")
-            
-            # Display detailed student information
-            prediction_data = found_student.get('prediction_data', {})
-            prediction_result = found_student.get('prediction_result', {})
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write("**Personal Information**")
-                st.markdown(f"**Student ID:** {found_student.get('student_id', 'N/A')}")
-                st.markdown(f"**Course:** {prediction_data.get('course', 'N/A')}")
-                st.markdown(f"**Gender:** {'Male' if prediction_data.get('gender') == 1 else 'Female' if prediction_data.get('gender') == 0 else 'N/A'}")
-                st.markdown(f"**Age at Enrollment:** {prediction_data.get('age_at_enrollment', 'N/A')}")
-                st.markdown(f"**Marital Status:** {prediction_data.get('marital_status', 'N/A')}")
-                st.markdown(f"**Nationality:** {prediction_data.get('nationality', 'N/A')}")
-                st.markdown(f"**International:** {'Yes' if prediction_data.get('international') == 1 else 'No' if prediction_data.get('international') == 0 else 'N/A'}")
-                st.markdown(f"**Scholarship Holder:** {'Yes' if prediction_data.get('scholarship_holder') == 1 else 'No' if prediction_data.get('scholarship_holder') == 0 else 'N/A'}")
-            
-            with col2:
-                st.write("**Prediction Results**")
-                st.markdown(f"**Dropout Probability:** {found_student.get('dropout_probability', 0):.2%}")
-                st.markdown(f"**Risk Level:** {found_student.get('risk_level', 'N/A')}")
-                st.markdown(f"**Confidence:** {found_student.get('confidence', 0):.2%}")
-                st.markdown(f"**Prediction:** {prediction_result.get('prediction', 'N/A')}")
-                st.markdown(f"**Created At:** {found_student.get('created_at', 'N/A')}")
-                
-                # Show probabilities
-                probabilities = prediction_result.get('probabilities', {})
-                if probabilities:
-                    st.write("**Detailed Probabilities:**")
-                    for outcome, prob in probabilities.items():
-                        st.markdown(f"**{outcome}:** {prob:.2%}")
-            
-            # Risk assessment
-            st.write("### Risk Assessment")
-            dropout_prob = found_student.get('dropout_probability', 0)
-            if dropout_prob >= 0.9:
-                st.error("🚨 **CRITICAL RISK**: This student has an extremely high probability of dropping out. Immediate intervention required!")
-            elif dropout_prob >= 0.8:
-                st.error("🚨 **VERY HIGH RISK**: This student has a very high probability of dropping out. Urgent intervention needed!")
-            elif dropout_prob >= 0.7:
-                st.warning("⚠️ **HIGH RISK**: This student has a high probability of dropping out. Intervention recommended.")
-            
-            # Contact and action buttons
-            st.write("### Actions")
-            col_contact, col_meeting, col_export = st.columns(3)
-            
-            with col_contact:
-                if st.button("📞 Contact Student", key="contact_btn"):
-                    st.session_state.show_contact = True
-                    st.session_state.student_found = True
-                    st.session_state.student_info = found_student
-                    st.rerun()
-            
-            with col_meeting:
-                if st.button("📅 Schedule Meeting", key="meeting_btn"):
-                    st.session_state.show_meeting = True
-                    st.session_state.student_found = True
-                    st.session_state.student_info = found_student
-                    st.rerun()
-            
-            with col_export:
-                if st.button("📥 Export Student Data", key="export_btn"):
-                    # Create export data
-                    export_data = {
-                        'student_id': found_student.get('student_id'),
-                        'dropout_probability': found_student.get('dropout_probability'),
-                        'risk_level': found_student.get('risk_level'),
-                        'confidence': found_student.get('confidence'),
-                        'prediction': prediction_result.get('prediction'),
-                        'created_at': found_student.get('created_at'),
-                        **prediction_data
-                    }
-                    
-                    export_df = pd.DataFrame([export_data])
-                    csv = export_df.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download Student Data",
-                        data=csv,
-                        file_name=f"high_risk_student_{(search_id_display or search_id or found_student.get('student_id','unknown'))}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
-                    )
-            
-            # Contact popup
-            if st.session_state.get('show_contact', False):
-                with st.container():
-                    import random
-                    st.markdown(f"""
-                    <div style=\"background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #1f77b4;\">
-                        <h3 style=\"color: #1f77b4; margin-top: 0;\">📞 Contact Information</h3>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Student Email:</strong> {(search_id_display or search_id or found_student.get('student_id','unknown'))}@university.edu</p>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Student Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Mother's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Father's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
-                        <div style=\"margin-top: 15px;\">
-                            <button style=\"background-color: #1f77b4; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;\">📧 Send Email</button>
-                            <button style=\"background-color: #28a745; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;\">📞 Call Now</button>
-                            <button style=\"background-color: #ffc107; color: black; padding: 8px 16px; border: none; border-radius: 5px;\">📅 Schedule</button>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button("❌ Close Contact Window", key="close_contact"):
-                        st.session_state.show_contact = False
-
-            # Meeting scheduling popup
-            if st.session_state.get('show_meeting', False):
-                with st.container():
-                    st.markdown(f"""
-                    <div style=\"background-color: #e8f5e8; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #28a745;\">
-                        <h3 style=\"color: #28a745; margin-top: 0;\">📅 Schedule Meeting</h3>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Student:</strong> {(search_id_display or search_id or found_student.get('student_id','unknown'))}</p>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Risk Level:</strong> {found_student.get('risk_level', 'N/A')}</p>
-                        <p style=\"color: #000000; margin: 5px 0;\"><strong>Dropout Probability:</strong> {found_student.get('dropout_probability', 0):.1%}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Meeting form
-                    with st.form("meeting_form"):
-                        meeting_date = st.date_input("Select Meeting Date")
-                        meeting_time = st.time_input("Select Meeting Time")
-                        meeting_type = st.selectbox("Meeting Type", ["Academic Counseling", "Financial Aid Discussion", "General Support", "Emergency Intervention"])
-                        notes = st.text_area("Meeting Notes", placeholder="Add any notes or agenda items...")
-                        
-                        submitted = st.form_submit_button("📅 Schedule Meeting")
-                        
-                        if submitted:
-                            st.success(f"✅ Meeting scheduled for {meeting_date} at {meeting_time}!")
-                            st.info(f"Meeting Type: {meeting_type}")
-                            if notes:
-                                st.info(f"Notes: {notes}")
-                            st.session_state.show_meeting = False
-                    
-                    if st.button("❌ Cancel", key="cancel_meeting"):
-                        st.session_state.show_meeting = False
+            st.rerun()
         else:
+            st.session_state.student_found = False
+            st.session_state.student_info = None
             st.error(f"Student {search_id} not found in database!")
+
+    # Show details if we have a student selected in session
+    if st.session_state.get('student_found') and st.session_state.get('student_info'):
+        found_student = st.session_state.student_info
+        prediction_data = found_student.get('prediction_data', {})
+        prediction_result = found_student.get('prediction_result', {})
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Personal Information**")
+            st.markdown(f"**Student ID:** {found_student.get('student_id', 'N/A')}")
+            st.markdown(f"**Course:** {prediction_data.get('course', 'N/A')}")
+            st.markdown(f"**Gender:** {'Male' if prediction_data.get('gender') == 1 else 'Female' if prediction_data.get('gender') == 0 else 'N/A'}")
+            st.markdown(f"**Age at Enrollment:** {prediction_data.get('age_at_enrollment', 'N/A')}")
+            st.markdown(f"**Marital Status:** {prediction_data.get('marital_status', 'N/A')}")
+            st.markdown(f"**Nationality:** {prediction_data.get('nationality', 'N/A')}")
+            st.markdown(f"**International:** {'Yes' if prediction_data.get('international') == 1 else 'No' if prediction_data.get('international') == 0 else 'N/A'}")
+            st.markdown(f"**Scholarship Holder:** {'Yes' if prediction_data.get('scholarship_holder') == 1 else 'No' if prediction_data.get('scholarship_holder') == 0 else 'N/A'}")
+        
+        with col2:
+            st.write("**Prediction Results**")
+            st.markdown(f"**Dropout Probability:** {found_student.get('dropout_probability', 0):.2%}")
+            st.markdown(f"**Risk Level:** {found_student.get('risk_level', 'N/A')}")
+            st.markdown(f"**Confidence:** {found_student.get('confidence', 0):.2%}")
+            st.markdown(f"**Prediction:** {prediction_result.get('prediction', 'N/A')}")
+            st.markdown(f"**Created At:** {found_student.get('created_at', 'N/A')}")
+            
+            # Show probabilities
+            probabilities = prediction_result.get('probabilities', {})
+            if probabilities:
+                st.write("**Detailed Probabilities:**")
+                for outcome, prob in probabilities.items():
+                    st.markdown(f"**{outcome}:** {prob:.2%}")
+        
+        # Risk assessment
+        st.write("### Risk Assessment")
+        dropout_prob = found_student.get('dropout_probability', 0)
+        if dropout_prob >= 0.9:
+            st.error("🚨 **CRITICAL RISK**: This student has an extremely high probability of dropping out. Immediate intervention required!")
+        elif dropout_prob >= 0.8:
+            st.error("🚨 **VERY HIGH RISK**: This student has a very high probability of dropping out. Urgent intervention needed!")
+        elif dropout_prob >= 0.7:
+            st.warning("⚠️ **HIGH RISK**: This student has a high probability of dropping out. Intervention recommended.")
+        
+        # Contact and action buttons
+        st.write("### Actions")
+        col_contact, col_meeting, col_export = st.columns(3)
+        
+        with col_contact:
+            if st.button("📞 Contact Student", key="contact_btn"):
+                st.session_state.show_contact = True
+                st.session_state.student_found = True
+                st.session_state.student_info = found_student
+        
+        with col_meeting:
+            if st.button("📅 Schedule Meeting", key="meeting_btn"):
+                st.session_state.show_meeting = True
+                st.session_state.student_found = True
+                st.session_state.student_info = found_student
+        
+        with col_export:
+            if st.button("📥 Export Student Data", key="export_btn"):
+                # Create export data
+                export_data = {
+                    'student_id': found_student.get('student_id'),
+                    'dropout_probability': found_student.get('dropout_probability'),
+                    'risk_level': found_student.get('risk_level'),
+                    'confidence': found_student.get('confidence'),
+                    'prediction': prediction_result.get('prediction'),
+                    'created_at': found_student.get('created_at'),
+                    **prediction_data
+                }
+                
+                export_df = pd.DataFrame([export_data])
+                csv = export_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Student Data",
+                    data=csv,
+                    file_name=f"high_risk_student_{(search_id_display or search_id or found_student.get('student_id','unknown'))}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+        
+        # Contact popup
+        if st.session_state.get('show_contact', False):
+            with st.container():
+                import random
+                st.markdown(f"""
+                <div style=\"background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #1f77b4;\">
+                    <h3 style=\"color: #1f77b4; margin-top: 0;\">📞 Contact Information</h3>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Student Email:</strong> {(search_id_display or search_id or found_student.get('student_id','unknown'))}@university.edu</p>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Student Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Mother's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Father's Phone:</strong> +1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}</p>
+                    <div style=\"margin-top: 15px;\">
+                        <button style=\"background-color: #1f77b4; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;\">📧 Send Email</button>
+                        <button style=\"background-color: #28a745; color: white; padding: 8px 16px; border: none; border-radius: 5px; margin-right: 10px;\">📞 Call Now</button>
+                        <button style=\"background-color: #ffc107; color: black; padding: 8px 16px; border: none; border-radius: 5px;\">📅 Schedule</button>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("❌ Close Contact Window", key="close_contact"):
+                    st.session_state.show_contact = False
+
+        # Meeting scheduling popup
+        if st.session_state.get('show_meeting', False):
+            with st.container():
+                st.markdown(f"""
+                <div style=\"background-color: #e8f5e8; padding: 20px; border-radius: 10px; margin: 10px 0; border: 2px solid #28a745;\">
+                    <h3 style=\"color: #28a745; margin-top: 0;\">📅 Schedule Meeting</h3>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Student:</strong> {(search_id_display or search_id or found_student.get('student_id','unknown'))}</p>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Risk Level:</strong> {found_student.get('risk_level', 'N/A')}</p>
+                    <p style=\"color: #000000; margin: 5px 0;\"><strong>Dropout Probability:</strong> {found_student.get('dropout_probability', 0):.1%}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Meeting form
+                with st.form("meeting_form"):
+                    meeting_date = st.date_input("Select Meeting Date")
+                    meeting_time = st.time_input("Select Meeting Time")
+                    meeting_type = st.selectbox("Meeting Type", ["Academic Counseling", "Financial Aid Discussion", "General Support", "Emergency Intervention"])
+                    notes = st.text_area("Meeting Notes", placeholder="Add any notes or agenda items...")
+                    
+                    submitted = st.form_submit_button("📅 Schedule Meeting")
+                    
+                    if submitted:
+                        st.success(f"✅ Meeting scheduled for {meeting_date} at {meeting_time}!")
+                        st.info(f"Meeting Type: {meeting_type}")
+                        if notes:
+                            st.info(f"Notes: {notes}")
+                        st.session_state.show_meeting = False
+                
+                if st.button("❌ Cancel", key="cancel_meeting"):
+                    st.session_state.show_meeting = False
     
     # Analytics
     st.write("### Students Analytics")
@@ -697,7 +699,7 @@ if page == "Counselor Dashboard":
             )
 
 elif page == "Student Database":
-    st.title("👨‍🎓 Student Database")
+    st.title(" Student Database")
     
     if not mongodb_connected:
         st.error("❌ MongoDB is not connected. Cannot access student database.")
@@ -834,7 +836,7 @@ elif page == "About":
 
     with col1:
         st.write("""
-        **🎓 Counselor Dashboard:**
+        **Counselor Dashboard:**
         - View all students needing counseling
         - Search students by unique Student ID
         - Filter by counseling type and student status
@@ -844,7 +846,7 @@ elif page == "About":
 
     with col2:
         st.write("""
-        **👨‍🎓 Student Dashboard:**
+        **Student Dashboard:**
         - Personal academic information
         - Academic performance tracking
         - Risk factor analysis
@@ -862,7 +864,6 @@ elif page == "About":
     st.write("### Future Updates")
     st.write(f"""
     - Real Counsellors
-    - Chatbot
     - Achievement Badges
     - Different Counsellors Can be provided( Academic, Financial, Personal, Time Management)
     """)
@@ -903,7 +904,7 @@ elif page == "About":
     """)
 
 elif page == "AI Predictions":
-    st.title("🤖 Let's Predict")
+    st.title("Let's Predict")
     
     if not api_connected:
         st.error("❌ AI API is not connected. Please start the Flask API server.")
@@ -1335,7 +1336,7 @@ elif page == "Student Mood Tracker":
 
 elif page == "Student Chatbot":
     st.title("💬 Student Chatbot")
-    st.write("Share your concerns and get supportive, practical guidance.")
+    st.write("Share your concerns and get supportive, practical guidance.(If not working, please try OFFLINE CHATBOT)")
 
     # Ensure a session ID for backend chat context
     if 'chat_session_id' not in st.session_state:
