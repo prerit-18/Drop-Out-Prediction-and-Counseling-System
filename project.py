@@ -44,8 +44,18 @@ if counselling_data is None or student_data is None:
 # API Configuration
 API_BASE_URL = "http://localhost:5001"
 
-# MongoDB Configuration
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+# MongoDB Configuration (secrets > env > localhost)
+try:
+    _secret_uri = None
+    if hasattr(st, "secrets"):
+        _secret_uri = st.secrets.get("MONGODB_URI")
+except Exception:
+    _secret_uri = None
+MONGODB_URI = (
+    _secret_uri
+    or os.getenv("MONGODB_URI")
+    or "mongodb://127.0.0.1:27017/"
+)
 DATABASE_NAME = "student_dropout_db"
 COLLECTION_NAME = "high_risk_students"
 MOOD_COLLECTION_NAME = "student_moods"
