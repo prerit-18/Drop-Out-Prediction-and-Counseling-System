@@ -343,9 +343,9 @@ if main_section == "Counselor Section":
     page = st.sidebar.radio("Counselor Pages", ["Counselor Dashboard", "Student Database", "AI Predictions"])
 elif main_section == "Student Section":
     # Student sub-menu
-    student_page = st.sidebar.radio("Student Pages", ["Mood Tracker", "AI Chatbot", "Offline Chatbot"])
+    student_page = st.sidebar.radio("Student Pages", ["Student Feedback", "AI Chatbot", "Offline Chatbot"])
     page = (
-        "Student Mood Tracker" if student_page == "Mood Tracker" else
+        "Student Feedback" if student_page == "Student Feedback" else
         "Student Chatbot" if student_page == "AI Chatbot" else
         "Offline Chatbot"
     )
@@ -1263,8 +1263,8 @@ elif page == "AI Predictions":
         else:
             st.info("💡 Upload and process a CSV file to see analytics here.")
 
-elif page == "Student Mood Tracker":
-    st.title("🧠 Student Mood Tracker")
+elif page == "Student Feedback":
+    st.title("🧠 Student Feedback")
     
     if not mongodb_connected:
         st.error("❌ MongoDB is not connected. Cannot save or fetch moods.")
@@ -1275,7 +1275,7 @@ elif page == "Student Mood Tracker":
         st.session_state.logged_in_student_id = None
     
     if st.session_state.logged_in_student_id is None:
-        st.write("Please login with your Student ID to access the mood tracker.")
+        st.write("Please login with your Student ID to access the Student Feedback.")
         with st.form("mood_login_form"):
             login_student_id = st.text_input("Student ID", key="mood_login_student_id")
             login_submitted = st.form_submit_button("🔐 Login", type="primary")
