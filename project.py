@@ -319,7 +319,12 @@ def convert_student_to_api_format(student_row):
     
     return api_data
 
-# Check API status
+
+# Add a refresh button for API status
+refresh_api = st.sidebar.button("🔄 Refresh API Status")
+if refresh_api:
+    # Clear the cache for check_api_health
+    check_api_health.clear()
 api_connected, api_info = check_api_health()
 
 # Check MongoDB status
@@ -355,6 +360,7 @@ if api_connected:
 else:
     st.sidebar.error("❌ AI API Disconnected")
     st.sidebar.info("💡 Start Flask API: `python app.py`")
+    st.sidebar.info("If the API is running, try 'Refresh API Status' above.")
 
 # MongoDB Status Indicator
 if mongodb_connected:
