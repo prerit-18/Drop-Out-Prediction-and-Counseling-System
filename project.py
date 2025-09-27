@@ -332,7 +332,7 @@ mongodb_client = get_mongodb_connection()
 mongodb_connected = mongodb_client is not None
 
 # Sidebar navigation
-st.sidebar.title("Team Data Dynamos")
+st.sidebar.title("Drop Shield")
 
 
 # Simplified top-level navigation
