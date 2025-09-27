@@ -470,5 +470,6 @@ if __name__ == '__main__':
     print("- POST /predict : Single prediction")
     print("- POST /predict_batch : Batch prediction")
     
-    port = int(os.getenv("PORT", "5001"))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5001))  # Render assigns a port
+    app.run(host="0.0.0.0", port=port, debug=False)
