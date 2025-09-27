@@ -9,7 +9,7 @@ from pymongo import MongoClient
 from datetime import datetime
 import os
 
-API_URL = "https://drop-out-prediction-and-counseling-system.onrender.com"
+API_URL = "https://drop-out-prediction-and-counseling-system.onrender.com"  # Deployed Flask API URL
 
 # Page configuration
 st.set_page_config(
@@ -44,7 +44,7 @@ if counselling_data is None or student_data is None:
     st.stop()
 
 # API Configuration
-API_BASE_URL = "https://drop-out-prediction-and-counseling-system.onrender.com"
+API_BASE_URL = "https://drop-out-prediction-and-counseling-system.onrender.com"  # Deployed Flask API URL
 # MongoDB Configuration (secrets > env > localhost)
 try:
     _secret_uri = None
@@ -55,6 +55,7 @@ except Exception:
 MONGODB_URI = (
     _secret_uri
     or os.getenv("MONGODB_URI")
+    # Use only for local development. For production, use a cloud MongoDB URI.
     or "mongodb://127.0.0.1:27017/"
 )
 DATABASE_NAME = "student_dropout_db"
@@ -79,9 +80,9 @@ def get_mongodb_connection():
         if not connection_uri:
             connection_uri = os.getenv("MONGODB_URI")
             
-        # Method 3: Fallback to localhost
+    # Method 3: Fallback to localhost (for local dev only)
         if not connection_uri:
-            connection_uri = "mongodb://127.0.0.1:27017/"
+            connection_uri = "mongodb://127.0.0.1:27017/"  # Only for local dev
             
         if not connection_uri:
             st.error("❌ No MongoDB connection string found")
