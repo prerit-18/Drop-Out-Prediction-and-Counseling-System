@@ -76,8 +76,6 @@ FEATURE_MAPPING = {
 
 # In-memory chatbot sessions
 CHAT_SESSIONS = {}
-# Offline chatbot conversations store
-OFFLINE_CONVERSATIONS = {}
 SYSTEM_PROMPT = (
     "You are a helpful student counselor. Provide empathetic and practical advice for academic stress, family pressure, and dropout prevention."
 )
@@ -115,31 +113,6 @@ def get_gemini_model():
         GEMINI_LAST_ERROR = str(e)
         return None
 
-def _offline_get_or_create_session(session_id: str | None) -> str:
-    if not session_id:
-        session_id = str(uuid.uuid4())
-    if session_id not in OFFLINE_CONVERSATIONS:
-        OFFLINE_CONVERSATIONS[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
-    return session_id
-
-def rule_based_reply(user_message: str) -> str:
-    m = (user_message or "").lower()
-    if any(k in m for k in ("stress", "stressed", "anxious", "anxiety")):
-        return (
-            "I'm sorry you're feeling stressed. Try short study bursts (25–30 mins), take regular breaks, hydrate, and get good sleep. I can help make a simple schedule." )
-    if any(k in m for k in ("exam", "exams", "test")):
-        return (
-            "Exams can be overwhelming. Break your syllabus into small chunks and review daily. Would you like a revision plan template?" )
-    if any(k in m for k in ("family", "parents", "home")):
-        return (
-            "Family pressure is tough. If it’s safe, try a calm conversation about your goals. We can outline talking points together, or you can book a counselor session." )
-    if any(k in m for k in ("career", "job", "future")):
-        return (
-            "Explore interests through small projects and short courses. Tell me a subject you enjoy and I can suggest a next step." )
-    if any(k in m for k in ("suicide", "hurt myself", "kill myself", "die by")):
-        return (
-            "I'm really sorry you're feeling this way. I'm not a replacement for emergency help. If you are in immediate danger, please contact local emergency services or a crisis hotline now. I can share resources for your country if you’d like." )
-    return "Thanks for sharing. Could you tell me a bit more so I can help better?"
 
 @app.route('/')
 def home():
@@ -419,44 +392,6 @@ def chat():
             "status": "error"
         }), 500
 
-@app.route('/chat_offline', methods=['POST'])
-def chat_offline():
-    try:
-        data = request.get_json(force=True) or {}
-        session_id = data.get('session_id')
-        message = (data.get('message') or '').strip()
-        if not message:
-            return jsonify({"error": "No message provided"}), 400
-
-        session_id = _offline_get_or_create_session(session_id)
-        history = OFFLINE_CONVERSATIONS[session_id]
-
-        # Append user message
-        history.append({"role": "user", "content": message})
-
-        # Strictly offline response
-        assistant_text = rule_based_reply(message)
-
-        history.append({"role": "assistant", "content": assistant_text})
-        return jsonify({
-            "session_id": session_id,
-            "reply": assistant_text,
-            "history": history[-30:]
-        })
-    except Exception as e:
-        return jsonify({"error": f"Chat offline failed: {str(e)}"}), 500
-
-@app.route('/reset_offline_session', methods=['POST'])
-def reset_offline_session():
-    try:
-        data = request.get_json(force=True) or {}
-        session_id = data.get('session_id')
-        if not session_id:
-            return jsonify({"error": "session_id required"}), 400
-        OFFLINE_CONVERSATIONS.pop(session_id, None)
-        return jsonify({"status": "reset", "session_id": session_id})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     if model is None:
