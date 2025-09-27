@@ -44,8 +44,7 @@ if counselling_data is None or student_data is None:
     st.stop()
 
 # API Configuration
-API_BASE_URL = "http://localhost:5001"
-
+API_BASE_URL = "https://drop-out-prediction-and-counseling-system.onrender.com"
 # MongoDB Configuration (secrets > env > localhost)
 try:
     _secret_uri = None
