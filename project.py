@@ -343,11 +343,10 @@ if main_section == "Counselor Section":
     page = st.sidebar.radio("Counselor Pages", ["Counselor Dashboard", "Student Database", "AI Predictions"])
 elif main_section == "Student Section":
     # Student sub-menu
-    student_page = st.sidebar.radio("Student Pages", ["Student Feedback", "AI Chatbot", "Offline Chatbot"])
+    student_page = st.sidebar.radio("Student Pages", ["Student Feedback", "AI Chatbot"])
     page = (
         "Student Feedback" if student_page == "Student Feedback" else
-        "Student Chatbot" if student_page == "AI Chatbot" else
-        "Offline Chatbot"
+        "Student Chatbot"
     )
 else:
     page = "About"
@@ -1366,7 +1365,7 @@ elif page == "Student Feedback":
 
 elif page == "Student Chatbot":
     st.title("💬 Student Chatbot")
-    st.write("Share your concerns and get supportive, practical guidance.(If not working, please try OFFLINE CHATBOT)")
+    st.write("Share your concerns and get supportive, practical guidance.")
 
     # Ensure a session ID for backend chat context
     if 'chat_session_id' not in st.session_state:
@@ -1405,41 +1404,3 @@ elif page == "Student Chatbot":
         st.session_state.chat_history_ui.append(('assistant', reply))
         st.chat_message("assistant").markdown(reply)
 
-elif page == "Offline Chatbot":
-    st.title("💬 Offline Chatbot")
-    st.write("This chatbot works without internet or API keys using built-in guidance.")
-
-    if 'offline_session_id' not in st.session_state:
-        st.session_state.offline_session_id = f"offline_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-    if 'offline_history_ui' not in st.session_state:
-        st.session_state.offline_history_ui = []
-
-    for role, content in st.session_state.offline_history_ui:
-        st.chat_message("user" if role == 'user' else "assistant").markdown(content)
-
-    user_msg = st.chat_input("Type your message...")
-
-    if user_msg:
-        st.session_state.offline_history_ui.append(('user', user_msg))
-        st.chat_message("user").markdown(user_msg)
-        try:
-            resp = requests.post(
-                f"{API_BASE_URL}/chat_offline",
-                json={
-                    "session_id": st.session_state.offline_session_id,
-                    "message": user_msg
-                },
-                timeout=10
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                reply = data.get('reply', '...')
-                st.session_state.offline_session_id = data.get('session_id', st.session_state.offline_session_id)
-            else:
-                reply = f"Backend error: {resp.status_code}"
-        except Exception as e:
-            reply = f"Connection error: {str(e)}"
-
-        st.session_state.offline_history_ui.append(('assistant', reply))
-        st.chat_message("assistant").markdown(reply)
