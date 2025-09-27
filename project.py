@@ -9,6 +9,8 @@ from pymongo import MongoClient
 from datetime import datetime
 import os
 
+API_URL = "https://drop-out-prediction-and-counseling-system.onrender.com"
+
 # Page configuration
 st.set_page_config(
     page_title="Student Dropout Prediction & Counseling System",
