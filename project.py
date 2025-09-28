@@ -1309,7 +1309,7 @@ elif page == "Student Feedback":
         with col_b:
             sleep_hours = st.number_input("Sleep Last Night (hours)", min_value=0.0, max_value=24.0, value=7.0, step=0.5)
             notes = st.text_area("Notes (optional)", placeholder="Anything you'd like to share...")
-        submitted = st.form_submit_button("💾 Submit Mood", type="primary")
+        submitted = st.form_submit_button("💾 Submit", type="primary")
     
     if submitted:
         student_id = st.session_state.logged_in_student_id
@@ -1321,13 +1321,13 @@ elif page == "Student Feedback":
             st.error(msg)
     
     st.divider()
-    st.write("### Recent Mood History")
+    st.write("### Recent Feedback")
     
     # Always restrict to the logged-in student
     entries = get_recent_mood_entries(st.session_state.logged_in_student_id, limit=100)
     
     if not entries:
-        st.info("No mood entries found yet.")
+        st.info("No feedback entries found yet.")
         st.stop()
     
     # Convert to DataFrame for display and charts
